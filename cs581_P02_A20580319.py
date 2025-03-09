@@ -161,4 +161,6 @@ def main():
     print(f"Execution time: {execution_time:.2f} seconds")
     print(f"Complete path cost: {best_cost:.2f}")
 
+if __name__ == "__main__":
+    main()
 
