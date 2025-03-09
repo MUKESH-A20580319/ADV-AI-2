@@ -130,5 +130,8 @@ def main():
 
     print(f"\nSolution saved to {output_filename}")
 
+if __name__ == "__main__":
+    main()
+
 
 
