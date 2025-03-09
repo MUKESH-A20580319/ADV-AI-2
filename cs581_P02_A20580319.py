@@ -4,6 +4,7 @@ import numpy as np
 import time
 import random
 import os
+import matplotlib.pyplot as plt
 
 def euclidean_distance(coord1, coord2):
     """Compute Euclidean distance between two points."""
@@ -34,22 +35,22 @@ def initialize_population(states, population_size):
 def fitness(solution, distance_matrix):
     """Calculate fitness as the inverse of total path cost."""
     total_distance = sum(distance_matrix[solution[i]][solution[i+1]] for i in range(len(solution)-1))
-    return 1 / total_distance
+    return 1 / total_distance  # Higher fitness for shorter paths
 
-def roulette_wheel_selection(population, fitness_values):
-    """Select parents using roulette wheel selection."""
-    total_fitness = sum(fitness_values)
-    selection_probs = [f / total_fitness for f in fitness_values]
-    return random.choices(population, weights=selection_probs, k=2)
+def tournament_selection(population, fitness_values, k=5):
+    """Select best individual from a random subset (Tournament Selection)."""
+    selected = random.sample(list(zip(population, fitness_values)), k)
+    return max(selected, key=lambda x: x[1])[0]
 
-def ordered_crossover(parent1, parent2):
-    """Perform ordered crossover (OX)."""
+def two_point_crossover(parent1, parent2):
+    """Perform Two-Point Crossover (TPX)."""
     size = len(parent1)
-    p1, p2 = sorted(random.sample(range(1, size-1), 2))
+    p1, p2 = sorted(random.sample(range(1, size-1), 2))  # Select two crossover points
 
     child = [None] * size
-    child[p1:p2] = parent1[p1:p2]
+    child[p1:p2] = parent1[p1:p2]  # Copy middle section from parent1
 
+    # Fill remaining positions with genes from parent2 in order
     p2_elements = [gene for gene in parent2 if gene not in child]
     idx = 0
     for i in range(size):
@@ -65,32 +66,70 @@ def swap_mutation(individual, mutation_prob):
         individual[i], individual[j] = individual[j], individual[i]
     return individual
 
-def genetic_algorithm(states, distance_matrix, num_iterations, mutation_prob, population_size=100):
-    """Run Genetic Algorithm to solve TSP."""
+def two_opt(solution, distance_matrix, max_swaps=50):
+    """Apply 2-opt local optimization with limited swaps."""
+    best = solution
+    best_cost = sum(distance_matrix[best[i]][best[i+1]] for i in range(len(best)-1))
+    swap_count = 0
+
+    for i in range(1, len(solution) - 2):
+        for j in range(i + 1, len(solution) - 1):
+            if j - i == 1:  # Skip adjacent swaps
+                continue
+            new_solution = best[:i] + best[i:j][::-1] + best[j:]
+            new_cost = sum(distance_matrix[new_solution[k]][new_solution[k+1]] for k in range(len(new_solution)-1))
+
+            if new_cost < best_cost:
+                best = new_solution
+                best_cost = new_cost
+                swap_count += 1
+
+            if swap_count >= max_swaps:  # Stop early after max swaps
+                return best
+
+    return best
+
+def genetic_algorithm(states, distance_matrix, num_iterations, mutation_prob, population_size=500):
+    """Run Optimized Genetic Algorithm to solve TSP."""
     population = initialize_population(states, population_size)
 
     best_solution = None
     best_cost = float('inf')
 
-    for _ in range(num_iterations):
+    iteration_data = []  # To store iteration-wise results for plotting
+    initial_solution = population[0]  # Store the first generated random solution
+
+    for iteration in range(num_iterations):
         fitness_values = [fitness(ind, distance_matrix) for ind in population]
         new_population = []
 
         for _ in range(population_size // 2):
-            parent1, parent2 = roulette_wheel_selection(population, fitness_values)
-            child1, child2 = ordered_crossover(parent1, parent2), ordered_crossover(parent2, parent1)
+            parent1, parent2 = tournament_selection(population, fitness_values), tournament_selection(population, fitness_values)
+            child1, child2 = two_point_crossover(parent1, parent2), two_point_crossover(parent2, parent1)
             child1, child2 = swap_mutation(child1, mutation_prob), swap_mutation(child2, mutation_prob)
+
+            # Apply local optimization (2-opt)
+            child1 = two_opt(child1, distance_matrix)
+            child2 = two_opt(child2, distance_matrix)
+
             new_population.extend([child1, child2])
 
-        population = new_population
+        # Apply elitism (keep the best individual)
         best_individual = min(population, key=lambda x: sum(distance_matrix[x[i]][x[i+1]] for i in range(len(x)-1)))
+        new_population[0] = best_individual  # Replace first individual with the best from last gen
+
+        population = new_population
         best_individual_cost = sum(distance_matrix[best_individual[i]][best_individual[i+1]] for i in range(len(best_individual)-1))
+
+        # Store iteration results
+        iteration_data.append((iteration, min(fitness_values), max(fitness_values), sum(fitness_values) / len(fitness_values)))
 
         if best_individual_cost < best_cost:
             best_solution = best_individual
             best_cost = best_individual_cost
 
-    return best_solution, best_cost
+    return initial_solution, best_solution, best_cost, iteration_data
+
 
 def main():
     """Main execution function."""
@@ -108,30 +147,18 @@ def main():
 
     start_time = time.time()
     states, distance_matrix = load_data(file_path)
-    best_solution, best_cost = genetic_algorithm(states, distance_matrix, num_iterations, mutation_prob)
+    initial_solution, best_solution, best_cost, iteration_data = genetic_algorithm(states, distance_matrix, num_iterations, mutation_prob)
     execution_time = time.time() - start_time
 
     # Display results
-    print("\nSiva Mukesh, A20580319 solution:")
+
     print(f"Initial state: {states[0]}")
     print(f"\nGenetic Algorithm:")
     print(f"Command Line Parameters: {file_path}, {num_iterations}, {mutation_prob}")
-    print(f"Initial solution: {', '.join(states)}")
+    print(f"Initial solution: {', '.join(initial_solution)}")
     print(f"Final solution: {', '.join(best_solution)}")
     print(f"Number of iterations: {num_iterations}")
     print(f"Execution time: {execution_time:.2f} seconds")
     print(f"Complete path cost: {best_cost:.2f}")
-
-    # Save to file
-    output_filename = f"{os.path.splitext(os.path.basename(file_path))[0]}_SOLUTION_GA.csv"
-    with open(output_filename, "w") as f:
-        f.write(f"{best_cost:.2f}\n")
-        f.writelines("\n".join(best_solution))
-
-    print(f"\nSolution saved to {output_filename}")
-
-if __name__ == "__main__":
-    main()
-
 
 
