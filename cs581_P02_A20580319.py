@@ -152,6 +152,7 @@ def main():
 
     # Display results
 
+    print("\nMukesh Siva, A20580319 solution:")
     print(f"Initial state: {states[0]}")
     print(f"\nGenetic Algorithm:")
     print(f"Command Line Parameters: {file_path}, {num_iterations}, {mutation_prob}")
